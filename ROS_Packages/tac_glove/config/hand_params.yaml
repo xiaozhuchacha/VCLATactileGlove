@@ -1,0 +1,44 @@
+
+PalmWidth: 0.09
+PalmLength: 0.09
+PalmHeight: 0.03
+ProximalPhalangeLength: 0.03
+ProximalPhalanxLength: 0.03
+MiddlePhalangeLength: 0.025
+DistalPhalangeLength: 0.025
+DistalPhalanxLength: 0.03
+radius: 0.008  # radius of each marker
+gridDimension: 0.08  # palm grid height/width
+
+# index of this array is the index in the force array
+IndexToLink:
+  - "proximal_phalanx_link_1"   #0
+  - "distal_phalanx_link_1"     #1
+  - "proximal_phalange_link_1"  #2
+  - "middle_phalange_link_1"    #3
+  - "distal_phalange_link_1"    #4
+  - "proximal_phalange_link_2"  #5
+  - "middle_phalange_link_2"    #6
+  - "distal_phalange_link_2"    #7
+  - "proximal_phalange_link_3"  #8
+  - "middle_phalange_link_3"    #9
+  - "distal_phalange_link_3"    #10
+  - "proximal_phalange_link_4"  #11
+  - "middle_phalange_link_4"    #12
+  - "distal_phalange_link_4"    #13
+  - "palm_link"                 #14
+  - "palm_link"                 #15
+  - "palm_link"                 #16
+  - "palm_link"                 #17
+  - "palm_link"                 #18
+  - "palm_link"                 #19
+  - "palm_link"                 #20
+  - "palm_link"                 #21
+  - "palm_link"                 #22
+  - "palm_link"                 #23
+  - "palm_link"                 #24
+  - "palm_link"                 #25
+  - "palm_link"                 #26
+  - "palm_link"                 #27
+  - "palm_link"                 #28
+  - "palm_link"                 #29

@@ -1,0 +1,288 @@
+#include "glove.h"
+
+
+Glove::Glove() : calibrated_(false) {
+
+  link_names_.resize(15);
+  link_names_[0] = "base_link";
+  link_names_[1] = "proximal_phalanx_link_1";
+  link_names_[2] = "distal_phalanx_link_1";
+  link_names_[3] = "proximal_phalange_link_1";
+  link_names_[4] = "middle_phalange_link_1";
+  link_names_[5] = "distal_phalange_link_1";
+  link_names_[6] = "proximal_phalange_link_2";
+  link_names_[7] = "middle_phalange_link_2";
+  link_names_[8] = "distal_phalange_link_2";
+  link_names_[9] = "proximal_phalange_link_3";
+  link_names_[10] = "middle_phalange_link_3";
+  link_names_[11] = "distal_phalange_link_3";
+  link_names_[12] = "proximal_phalange_link_4";
+  link_names_[13] = "middle_phalange_link_4";
+  link_names_[14] = "distal_phalange_link_4";
+  
+  link_lengths_.resize(15);
+  link_lengths_[0] = -1;
+  link_lengths_[1] = ProximalPhalanxLength;
+  link_lengths_[2] = DistalPhalanxLength;
+  link_lengths_[3] = ProximalPhalangeLength;
+  link_lengths_[4] = MiddlePhalangeLength;
+  link_lengths_[5] = DistalPhalangeLength;
+  link_lengths_[6] = ProximalPhalangeLength;
+  link_lengths_[7] = MiddlePhalangeLength;
+  link_lengths_[8] = DistalPhalangeLength;
+  link_lengths_[9] = ProximalPhalangeLength;
+  link_lengths_[10] = MiddlePhalangeLength;
+  link_lengths_[11] = DistalPhalangeLength;
+  link_lengths_[12] = ProximalPhalangeLength;
+  link_lengths_[13] = MiddlePhalangeLength;
+  link_lengths_[14] = DistalPhalangeLength;
+
+  parents_.resize(15);
+  parents_[0] = -1;
+  parents_[1] = 0;
+  parents_[2] = 1;
+  parents_[3] = 0;
+  parents_[4] = 3;
+  parents_[5] = 4;
+  parents_[6] = 0;
+  parents_[7] = 6;
+  parents_[8] = 7;
+  parents_[9] = 0;
+  parents_[10] = 9;
+  parents_[11] = 10;
+  parents_[12] = 0;
+  parents_[13] = 12;
+  parents_[14] = 13;
+
+  forces_.resize(30);
+
+  imu_sub_ = nh_.subscribe("tac_glove_imutracker_raw", 1, &Glove::imu_cb, this);
+  cal_sub_ = nh_.subscribe("tac_glove_imutracker_imuctrl", 1, &Glove::cal_cb, this);
+  force_sub_ = nh_.subscribe("force_msg", 1, &Glove::force_cb, this);
+  state_pub_ = nh_.advertise<sensor_msgs::JointState>("joint_states", 1);
+  marker_pub_ = nh_.advertise<visualization_msgs::Marker>("force_marker",1000);
+
+  // Set up canonical hand pose. This roughly approximates the joint angles of the hand in a flat
+  // position, and is totally eyeballed and non-scientific.
+
+  Eigen::Quaterniond q_ident;
+  Eigen::Quaterniond q_thumb, q_1, q_2, q_3, q_4;
+  q_ident.setIdentity();
+  q_thumb = Eigen::AngleAxisd(0.2*Pi, Eigen::Vector3d::UnitZ());
+  q_1 = Eigen::AngleAxisd(0.05*Pi, Eigen::Vector3d::UnitZ());
+  q_2 = Eigen::AngleAxisd(0.0, Eigen::Vector3d::UnitZ());
+  q_3 = Eigen::AngleAxisd(-0.05*Pi, Eigen::Vector3d::UnitZ());
+  q_4 = Eigen::AngleAxisd(-0.1*Pi, Eigen::Vector3d::UnitZ());
+
+  canonical_pose_.resize(15);
+  canonical_origin_.resize(15);
+  for (int i=0;i<15;++i) {
+    canonical_pose_[i] = q_ident;
+    canonical_origin_[i] = Eigen::Vector3d(0,0,0);
+  }
+  canonical_origin_[1] = Eigen::Vector3d(-.4*PalmLength, 2*(PalmWidth/4), 0);
+  canonical_origin_[2] = Eigen::Vector3d(ProximalPhalanxLength, 0, 0);
+  canonical_origin_[3] = Eigen::Vector3d(PalmLength/2, 1.5*(PalmWidth/4), 0);
+  canonical_origin_[4] = Eigen::Vector3d(ProximalPhalangeLength, 0, 0);
+  canonical_origin_[5] = Eigen::Vector3d(MiddlePhalangeLength, 0, 0);
+  canonical_origin_[6] = Eigen::Vector3d(PalmLength/2, 0.5*(PalmWidth/4), 0);
+  canonical_origin_[7] = Eigen::Vector3d(ProximalPhalangeLength, 0, 0);
+  canonical_origin_[8] = Eigen::Vector3d(MiddlePhalangeLength, 0, 0);
+  canonical_origin_[9] = Eigen::Vector3d(PalmLength/2, -0.5*(PalmWidth/4), 0);
+  canonical_origin_[10] = Eigen::Vector3d(ProximalPhalangeLength, 0, 0);
+  canonical_origin_[11] = Eigen::Vector3d(MiddlePhalangeLength, 0, 0);
+  canonical_origin_[12] = Eigen::Vector3d(PalmLength/2, -1.5*(PalmWidth/4), 0);
+  canonical_origin_[13] = Eigen::Vector3d(ProximalPhalangeLength, 0, 0);
+  canonical_origin_[14] = Eigen::Vector3d(MiddlePhalangeLength, 0, 0);
+  canonical_pose_[1] = q_thumb;
+  canonical_pose_[3] = q_1;
+  canonical_pose_[6] = q_2;
+  canonical_pose_[9] = q_3;
+  canonical_pose_[12] = q_4;
+}
+
+Glove::~Glove() {
+
+}
+
+visualization_msgs::Marker Glove::genmark(tf::Transform tf_marker, double length, double radius, float chroma, std::string ns)
+{
+  tf::Vector3 midpt=tf_marker.getOrigin();
+  tf::Quaternion q=tf_marker.getRotation();
+
+  visualization_msgs::Marker cylinder;
+  cylinder.header.frame_id = "base_link";
+  cylinder.header.stamp = ros::Time::now();
+  cylinder.ns = ns.c_str();
+  cylinder.type = visualization_msgs::Marker::CYLINDER;
+
+  cylinder.pose.position.x = midpt.getX();
+  cylinder.pose.position.y = midpt.getY();
+  cylinder.pose.position.z = midpt.getZ();
+
+  cylinder.pose.orientation.w = q.w();
+  cylinder.pose.orientation.x = q.x();
+  cylinder.pose.orientation.y = q.y();
+  cylinder.pose.orientation.z = q.z();
+  
+  cylinder.scale.x = radius * 2;
+  cylinder.scale.y = radius * 2;
+  cylinder.scale.z = length;
+
+  if (chroma > 1.0) {
+  	chroma = 1.0;
+  }
+  if (chroma < 0.0f) {
+        chroma = 0.0f;
+  }
+  cylinder.color.r = 1.0f;
+  cylinder.color.g = 0.0f;
+  cylinder.color.b = 0.0f;
+  cylinder.color.a = 1.0f;
+
+  return cylinder;
+}
+
+void Glove::cal_cb(const std_msgs::StringPtr msg) {
+  ROS_INFO_STREAM("Calibration triggered");
+
+  if (last_pose_.empty()) {
+    ROS_WARN_STREAM("No IMU data to calibrate to");
+    return;
+  }
+
+  cal_data_.resize(last_pose_.size());
+  for (int i=0;i<cal_data_.size();++i) {
+    cal_data_[i] = last_pose_[i].inverse() * canonical_pose_[i];
+  }
+  calibrated_ = true;
+}
+
+void Glove::imu_cb(const geometry_msgs::PoseArrayPtr msg) {
+  last_pose_.resize(msg->poses.size());
+  for (int i=0;i<msg->poses.size();++i) {
+    geometry_msgs::Pose p = msg->poses[i];
+    Eigen::Quaterniond q(p.orientation.w, p.orientation.x, p.orientation.y, p.orientation.z);
+    last_pose_[i] = q;
+  }
+
+  if (calibrated_) {
+    publish_state();
+  }
+
+}
+
+void Glove::force_cb(const tac_glove::glove msg) {
+  forces_[0] = msg.segments[0].force[0];
+  forces_[1] = msg.segments[0].force[1];
+  
+  int count=2;
+  for(int i=1;i<=4;++i)
+  {
+  	forces_[count]=msg.segments[i].force[0];
+        forces_[count+1]=msg.segments[i].force[1];
+  	forces_[count+2]=msg.segments[i].force[2];
+  	count+=3;
+  }
+
+  for(int i=5;i<=9;++i)
+  {
+  	forces_[count]=msg.segments[i].force[0];
+        forces_[count+1]=msg.segments[i].force[1];
+        forces_[count+2]=msg.segments[i].force[2];
+  	forces_[count+3]=msg.segments[i].force[3];
+        count+=4;
+  }
+ 
+  //*forces to chromas in publish_state()
+}
+
+void Glove::publish_state_finger(int idx_from_, int idx_to_)
+{
+  tf::Transform base_transform;
+
+  base_transform=tf::Transform::getIdentity();
+  for(int i=idx_from_;i<=idx_to_;++i){
+    if(i>=cal_data_.size())
+        break;
+    Eigen::Vector3d& t = canonical_origin_[i];
+    Eigen::Quaterniond q_a = last_pose_[parents_[i]] * cal_data_[parents_[i]];
+    Eigen::Quaterniond q_b = last_pose_[i] * cal_data_[i];
+    Eigen::Quaterniond q = q_a.inverse()*q_b;
+
+    tf::Transform transform;
+    transform.setOrigin(tf::Vector3(t[0],t[1],t[2]));
+    //strange here
+    /*if(idx_from_!=1){
+	tf::Quaternion q_tf(q.x(),-1.0*q.y(),-1.0*q.z(),q.w());
+        transform.setRotation(q_tf);
+    }
+    else{
+	tf::Quaternion q_tf(q.x(),q.y(),q.z(),q.w());
+    	transform.setRotation(q_tf);
+    }*/
+    tf::Quaternion q_tf(q.x(),q.y(),q.z(),q.w());
+    transform.setRotation(q_tf);
+    base_transform*=transform;
+
+    //marker
+    tf::Transform tf_mid;
+    tf_mid.setOrigin(tf::Vector3(link_lengths_[i]/2,0.0,0.0));
+    Eigen::Quaterniond q_mid;
+    q_mid=Eigen::AngleAxisd(0.5*Pi, Eigen::Vector3d::UnitY());
+    tf_mid.setRotation(tf::Quaternion(q_mid.x(),q_mid.y(),q_mid.z(),q_mid.w()));
+
+    tf::Transform tf_marker=base_transform*tf_mid;
+    std::string ns="tac_glove_marker"+link_names_[i];
+    visualization_msgs::Marker mk=genmark(tf_marker,link_lengths_[i],radius,1.0,ns);
+    //br_.sendTransform(tf::StampedTransform(transform, ros::Time::now(), link_names_[parents_[i]], link_names_[i]));
+    br_.sendTransform(tf::StampedTransform(base_transform, ros::Time::now(), link_names_[0], link_names_[i]));
+    marker_pub_.publish(mk);
+  }
+}
+
+void Glove::publish_state_palm()
+{
+  double X_center=arrayLength/2-arrayLength/8;
+  double Y_center=arrayLength/2-arrayLength/8;
+
+  //translation with respect to base_link frame
+  //for(int i=0;i<4;i++)
+  for(int i=0;i<4;i++)
+  {
+  	for(int j=0;j<4;j++)
+  	{
+		tf::Transform tf_marker;
+		tf_marker.setOrigin(tf::Vector3(X_center,Y_center,0.0));
+		tf_marker.setRotation(tf::Quaternion(0.0,0.0,0.0,1.0));
+		std::stringstream ss;
+		ss<<"tac_glove_marker"<<i<<"&"<<j;
+		visualization_msgs::Marker mk=genmark(tf_marker,PalmHeight,arrayLength/8,1.0,ss.str());
+		marker_pub_.publish(mk);
+		Y_center-=arrayLength/4;
+	}
+	X_center-=arrayLength/4;
+	Y_center=arrayLength/2-arrayLength/8;
+  }  
+}
+
+void Glove::publish_state() {
+  //thumb
+  publish_state_finger(1,2);
+
+  //index
+  publish_state_finger(3,5);
+
+  //middle
+  publish_state_finger(6,8);
+
+  //ring
+  publish_state_finger(9,11);
+
+  //pinkie
+  publish_state_finger(12,14);
+
+  //palm
+  publish_state_palm();  
+  ros::spinOnce();
+}

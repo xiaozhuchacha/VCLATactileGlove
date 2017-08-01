@@ -1,0 +1,68 @@
+#pragma once
+
+#include <sstream>
+#include <string>
+
+#include <ros/ros.h>
+#include <geometry_msgs/PoseArray.h>
+#include <sensor_msgs/JointState.h>
+#include <std_msgs/String.h>
+#include <Eigen/Core>
+#include <Eigen/Geometry>
+#include <tf/transform_broadcaster.h>
+#include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
+#include "tac_glove/glove.h"
+
+class Glove {
+public:
+  Glove();
+  ~Glove();
+
+
+private:
+
+  visualization_msgs::Marker genmark(tf::Transform tf_marker, double length, double radius, float chroma, std::string ns);
+  void imu_cb(const geometry_msgs::PoseArrayPtr msg);
+  void cal_cb(const std_msgs::StringPtr msg);
+  void force_cb(const tac_glove::glove msg);
+
+  void publish_state_finger(int idx_from_, int idx_to_);
+  void publish_state_palm();
+  void publish_state();
+
+  void add_joint_state(sensor_msgs::JointState& js, std::string name, Eigen::Quaterniond& q);
+
+  bool calibrated_;
+  std::vector<std::string> link_names_;
+  std::vector<double> link_lengths_;
+  std::vector<int> parents_;
+  std::vector<Eigen::Quaterniond> canonical_pose_;
+  std::vector<Eigen::Vector3d> canonical_origin_;
+  std::vector<Eigen::Quaterniond> last_pose_;
+  std::vector<Eigen::Quaterniond> cal_data_;
+  std::vector<double> forces_;
+
+
+  ros::NodeHandle nh_;
+
+  ros::Publisher state_pub_;
+  ros::Subscriber imu_sub_;
+  ros::Subscriber cal_sub_;
+  ros::Subscriber force_sub_;
+
+  tf::TransformBroadcaster br_;
+  ros::Publisher marker_pub_;
+
+  const double Pi = 3.145926536;
+  const double PalmWidth = .09;
+  const double PalmLength = .09;
+  const double PalmHeight = .03;
+  const double ProximalPhalangeLength = .03;
+  const double ProximalPhalanxLength = .03;
+  const double MiddlePhalangeLength = .025;
+  const double DistalPhalangeLength = .025;
+  const double DistalPhalanxLength = .03;
+  const double radius = 0.008;
+  const double arrayLength = 0.08;
+};

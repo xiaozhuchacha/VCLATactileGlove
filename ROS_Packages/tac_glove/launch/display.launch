@@ -1,0 +1,21 @@
+<launch>
+
+  <arg name="model" default="$(find tac_glove)/urdf/hand.urdf.xacro"/>
+  <arg name="gui" default="true" />
+  <arg name="rvizconfig" default="$(find tac_glove)/rviz/urdf.rviz" />
+
+  <!-- <param name="robot_description" command="$(find xacro)/xacro.py $(arg model)" /> -->
+  <param name="robot_description" command="$(find xacro)/xacro.py $(arg model)" />
+  <param name="use_gui" value="$(arg gui)"/>
+
+
+  <node name="glove_node" pkg="tac_glove" type="glove_node" args="--visual /home/xuxie/catkin_ws/src/tac_glove/bottle64/open_palm/ bottle64_open_palm_" required="true" output="screen" >
+    <rosparam command="load" file="$(find tac_glove)/config/hand_params.yaml" />
+
+  </node>
+  <!-- node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" / -->
+  <!-- node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher" / -->
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(arg rvizconfig)" required="true" />
+
+  <node pkg="tf" type="static_transform_publisher" name="wrist_baselink" args="0 0 0 0 0 0 1 /vicon/ucla_wrist/ucla_wrist /base_link 10" />
+</launch>
